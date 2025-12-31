@@ -44,7 +44,7 @@ void setup() {
   
   char moistureMsg[128];
   createSensorMsg(moisturePercentage, moistureMsg, sizeof(moistureMsg));
-  publish(PUB_TOPIC_MOISTURE, moistureMsg, false);
+  publish(PUB_TOPIC_MOISTURE, moistureMsg, true);
 
   delay(200);
 
