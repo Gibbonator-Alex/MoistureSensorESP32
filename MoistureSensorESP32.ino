@@ -13,8 +13,8 @@ constexpr gpio_num_t sensorPin = GPIO_NUM_0;
 // ========================
 // CONSTANTS
 // ========================
-constexpr float DRY_VALUE = 3050.0f;
-constexpr float WET_VALUE = 1220.0f;
+constexpr float DRY_VALUE = 3090.0f;
+constexpr float WET_VALUE = 1190.0f;
 constexpr int STATUS_INTERVAL = 43200; // seconds
 constexpr int CONNECT_TIMEOUT = 5000;
 constexpr char* ntpServer = "pool.ntp.org";
@@ -29,7 +29,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 
-void setup() {
+void setup() {  
   ensureWiFiConnected();
   client.setServer(mqtt_broker, mqtt_port);
   ensureMqttConnected();
@@ -52,6 +52,11 @@ void setup() {
   createStatusMsg(statusMsg, sizeof(statusMsg));
   publish(PUB_TOPIC_STATUS, statusMsg, true);
 
+  client.disconnect();
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  btStop();
+  
   delay(500);
 
   esp_sleep_enable_timer_wakeup( STATUS_INTERVAL * 1000000ULL );
@@ -67,7 +72,7 @@ void ensureWiFiConnected() {
   if (WiFi.status() == WL_CONNECTED) return;
 
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
+  WiFi.setSleep(true);
   WiFi.begin(ssid, password);
 
   unsigned long start = millis();
