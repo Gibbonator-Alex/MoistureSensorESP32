@@ -8,18 +8,19 @@
 // ========================
 // GPIO
 // ======================== 
-constexpr gpio_num_t sensorPin = GPIO_NUM_0;
+constexpr gpio_num_t SENSOR_PIN = GPIO_NUM_0;
+constexpr gpio_num_t SENSOR_PWR = GPIO_NUM_4;
 
 // ========================
 // CONSTANTS
 // ========================
-constexpr float DRY_VALUE = 3090.0f;
-constexpr float WET_VALUE = 1190.0f;
+constexpr float DRY_VALUE = 2650.0f;
+constexpr float WET_VALUE = 840.0f;
 constexpr int STATUS_INTERVAL = 43200; // seconds
 constexpr int CONNECT_TIMEOUT = 5000;
 constexpr char* ntpServer = "pool.ntp.org";
-constexpr long  gmtOffsetSec = 3600;
-constexpr int   daylightOffsetSec = 3600;
+constexpr long gmtOffsetSec = 3600;
+constexpr int daylightOffsetSec = 3600;
 
 // ========================
 // WiFi & MQTT
@@ -28,8 +29,14 @@ constexpr int   daylightOffsetSec = 3600;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-
-void setup() {  
+void setup() {
+  gpio_deep_sleep_hold_dis();
+  gpio_hold_dis(SENSOR_PWR);
+  
+  pinMode(SENSOR_PWR, OUTPUT);
+  digitalWrite(SENSOR_PWR, HIGH);
+  delay(200);
+  
   ensureWiFiConnected();
   client.setServer(mqtt_broker, mqtt_port);
   ensureMqttConnected();
@@ -37,10 +44,10 @@ void setup() {
   delay(200);
 
   configTime(gmtOffsetSec, daylightOffsetSec, ntpServer);
-
+  
   int rawMoisture = readMoisture();
   rawMoisture = constrain(rawMoisture, WET_VALUE, DRY_VALUE);
-  float moisturePercentage = (DRY_VALUE - rawMoisture) * 100.0f / (DRY_VALUE - WET_VALUE);
+  float moisturePercentage = (DRY_VALUE - rawMoisture) * 100.0f / (DRY_VALUE - WET_VALUE);  
   
   char moistureMsg[128];
   createSensorMsg(moisturePercentage, moistureMsg, sizeof(moistureMsg));
@@ -52,15 +59,9 @@ void setup() {
   createStatusMsg(statusMsg, sizeof(statusMsg));
   publish(PUB_TOPIC_STATUS, statusMsg, true);
 
-  client.disconnect();
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-  btStop();
-  
-  delay(500);
+  delay(200);
 
-  esp_sleep_enable_timer_wakeup( STATUS_INTERVAL * 1000000ULL );
-  esp_deep_sleep_start();
+  espSleep();
 }
 
 void loop() {}
@@ -68,6 +69,22 @@ void loop() {}
 // ========================
 // FUNCTIONS
 // ========================
+void espSleep()
+{
+  client.disconnect();
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  btStop();
+  digitalWrite(SENSOR_PWR, LOW);
+  gpio_hold_en(SENSOR_PWR);
+  gpio_deep_sleep_hold_en();
+  
+  delay(500);
+
+  esp_sleep_enable_timer_wakeup( STATUS_INTERVAL * 1000000ULL );
+  esp_deep_sleep_start();
+}
+
 void ensureWiFiConnected() {
   if (WiFi.status() == WL_CONNECTED) return;
 
@@ -79,6 +96,10 @@ void ensureWiFiConnected() {
   while (WiFi.status() != WL_CONNECTED && millis() - start < CONNECT_TIMEOUT) {
     delay(50);
   }
+
+  if(WiFi.status() != WL_CONNECTED){
+    espSleep();
+  }
 }
 
 void ensureMqttConnected(){
@@ -89,6 +110,10 @@ void ensureMqttConnected(){
     while(!client.connect(client_id.c_str()) && millis() - startAttemptTime < CONNECT_TIMEOUT){
       delay(50); 
     }
+  }
+
+  if(!client.connected()){
+    espSleep();
   }
 }
 
@@ -104,7 +129,7 @@ int readMoisture() {
   const int samples = 10;
   int sum = 0;
   for (int i = 0; i < samples; i++) {
-    sum += analogRead(sensorPin);
+    sum += analogRead(SENSOR_PIN);
     delay(5);
   }
   return sum / samples;
